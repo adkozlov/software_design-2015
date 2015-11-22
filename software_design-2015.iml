@@ -11,5 +11,6 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="JetBrains Annotations" level="project" />
     <orderEntry type="library" name="JCommander" level="project" />
+    <orderEntry type="library" name="Apache Commons CLI" level="project" />
   </component>
 </module>
