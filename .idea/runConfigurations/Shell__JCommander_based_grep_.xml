@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Shell (JCommander based grep)" type="Application" factoryName="Application">
+    <extension name="coverage" enabled="false" merge="false" sample_coverage="true" runner="idea" />
+    <option name="MAIN_CLASS_NAME" value="ru.spbau.kozlov.shell.Shell" />
+    <option name="VM_PARAMETERS" value="" />
+    <option name="PROGRAM_PARAMETERS" value="ru.spbau.kozlov.shell.api.commands.CatCommand ru.spbau.kozlov.shell.api.commands.WcCommand ru.spbau.kozlov.shell.api.commands.PwdCommand ru.spbau.kozlov.shell.api.commands.jcommander.GrepCommand" />
+    <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$/resources/shell/" />
+    <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
+    <option name="ALTERNATIVE_JRE_PATH" value="" />
+    <option name="ENABLE_SWING_INSPECTOR" value="false" />
+    <option name="ENV_VARIABLES" />
+    <option name="PASS_PARENT_ENVS" value="true" />
+    <module name="software_design-2015" />
+    <envs />
+    <method />
+  </configuration>
+</component>
