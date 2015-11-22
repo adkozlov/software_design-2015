@@ -3,12 +3,13 @@ package ru.spbau.kozlov.shell.api.commands;
 import org.jetbrains.annotations.NotNull;
 import ru.spbau.kozlov.shell.api.annotations.CommandName;
 import ru.spbau.kozlov.shell.api.annotations.ManPage;
-import ru.spbau.kozlov.shell.api.executions.Executor;
+import ru.spbau.kozlov.shell.api.invoker.ExecutionException;
 
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintStream;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * @author adkozlov
@@ -17,38 +18,34 @@ import java.util.List;
 @ManPage({"Prints the number of lines in specified files"})
 public class WcCommand extends AbstractCommand {
 
+    private final long[] total = {0};
+
     @Override
-    public void execute(@NotNull Executor.StreamsContainer streamsContainer) {
-        List<String> arguments = getArguments();
-        PrintStream outputStream = streamsContainer.getOutputStream();
+    public void execute(@NotNull InputStream inputStream,
+                        @NotNull PrintStream outputStream,
+                        @NotNull List<String> arguments) throws ExecutionException {
+        super.execute(inputStream, outputStream, arguments);
 
-        try {
-            if (arguments.isEmpty()) {
-                InputStream inputStream = streamsContainer.getInputStream();
-                if (inputStream.available() != 0) {
-                    try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream))) {
-                        printLinesCount(getLinesCount(bufferedReader), "", outputStream);
-                    }
-                } else {
-                    printUsage(outputStream);
-                }
-            } else {
-                long totalLinesCount = 0;
-                for (String fileName : arguments) {
-                    try (BufferedReader bufferedReader = Files.newBufferedReader(Paths.get(fileName))) {
-                        long linesCount = getLinesCount(bufferedReader);
-                        printLinesCount(linesCount, fileName, outputStream);
-                        totalLinesCount += linesCount;
-                    }
-                }
-
-                if (arguments.size() != 1) {
-                    printLinesCount(totalLinesCount, "total", outputStream);
-                }
-            }
-        } catch (IOException | UncheckedIOException e) {
-            printError(e, streamsContainer.getErrorStream());
+        if (arguments.size() > 1) {
+            outputStream.println(total[0] + " total");
         }
+    }
+
+    @Override
+    protected void handleInputStream(@NotNull InputStream inputStream,
+                                     @NotNull PrintStream outputStream) throws IOException {
+        WcConsumer wcConsumer = new WcConsumer();
+        forEachLine(inputStream, wcConsumer);
+        outputStream.println(wcConsumer.result);
+    }
+
+    @Override
+    protected void handleArgument(@NotNull String fileName, @NotNull PrintStream outputStream) throws IOException {
+        WcConsumer wcConsumer = new WcConsumer();
+        forEachLine(fileName, wcConsumer);
+        outputStream.println(wcConsumer.result + " " + fileName);
+
+        total[0] += wcConsumer.result;
     }
 
     @NotNull
@@ -57,14 +54,12 @@ public class WcCommand extends AbstractCommand {
         return "[file]";
     }
 
-    private static long getLinesCount(@NotNull BufferedReader bufferedReader) {
-        long[] result = {0};
-        bufferedReader.lines().forEach(line -> result[0]++);
-        return result[0];
-    }
+    private static class WcConsumer implements Consumer<String> {
+        private long result = 0;
 
-    private static void printLinesCount(long linesCount, @NotNull String target, @NotNull PrintStream outputStream) {
-        outputStream.printf("%d %s", linesCount, target);
-        outputStream.println();
+        @Override
+        public void accept(String line) {
+            result++;
+        }
     }
 }

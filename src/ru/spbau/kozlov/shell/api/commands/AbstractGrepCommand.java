@@ -1,13 +1,13 @@
 package ru.spbau.kozlov.shell.api.commands;
 
 import org.jetbrains.annotations.NotNull;
-import ru.spbau.kozlov.shell.api.executions.ExecutionException;
-import ru.spbau.kozlov.shell.api.executions.Executor;
+import org.jetbrains.annotations.Nullable;
+import ru.spbau.kozlov.shell.api.invoker.ExecutionException;
+import ru.spbau.kozlov.shell.api.invoker.PrintUsageException;
 
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Iterator;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintStream;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
@@ -15,15 +15,44 @@ import java.util.regex.Pattern;
 /**
  * @author adkozlov
  */
-public abstract class AbstractGrepCommand implements Command {
+public abstract class AbstractGrepCommand extends AbstractCommand {
 
-    protected static void print(@NotNull BufferedReader bufferedReader, @NotNull Predicate<String> stringPredicate, @NotNull PrintStream outputStream) {
-        bufferedReader.lines().filter(stringPredicate).forEach(outputStream::println);
-    }
+    @Nullable
+    private Predicate<String> stringPredicate;
 
     @NotNull
-    protected static String[] getArgumentsAsArray(@NotNull List<String> arguments) {
-        return arguments.toArray(new String[arguments.size()]);
+    protected abstract List<String> parseArguments(@NotNull String[] arguments) throws ExecutionException;
+
+    protected abstract boolean isCaseInsensitive();
+
+    protected abstract boolean isWordRegexp();
+
+    protected abstract long getAfterContextNum() throws ExecutionException;
+
+    @Override
+    public void execute(@NotNull InputStream inputStream,
+                        @NotNull PrintStream outputStream,
+                        @NotNull List<String> arguments) throws ExecutionException {
+        List<String> parsedArguments = parseArguments(arguments);
+        if (parsedArguments.isEmpty()) {
+            throw new PrintUsageException(getCommandName());
+        }
+
+        stringPredicate = getPredicate(getRegexp(parsedArguments.get(0)));
+
+        super.execute(inputStream, outputStream, parsedArguments.subList(1, parsedArguments.size()));
+    }
+
+    @Override
+    protected void handleInputStream(@NotNull InputStream inputStream, @NotNull PrintStream outputStream) throws IOException {
+        assert stringPredicate != null;
+        forEachLine(inputStream, stringPredicate, outputStream::println);
+    }
+
+    @Override
+    protected void handleArgument(@NotNull String fileName, @NotNull PrintStream outputStream) throws IOException {
+        assert stringPredicate != null;
+        forEachLine(fileName, stringPredicate, outputStream::println);
     }
 
     @NotNull
@@ -32,55 +61,17 @@ public abstract class AbstractGrepCommand implements Command {
     }
 
     @NotNull
-    protected abstract List<String> parseArguments() throws ExecutionException;
-
-    protected abstract boolean isCaseInsensitive();
-
-    protected abstract boolean isWordRegexp();
-
-    protected abstract long getAfterContextNum() throws ExecutionException;
-
-    protected abstract void printUsage(@NotNull PrintStream outputStream);
-
-    public void execute(@NotNull Executor.StreamsContainer streamsContainer) throws ExecutionException {
-        List<String> arguments = parseArguments();
-        PrintStream outputStream = streamsContainer.getOutputStream();
-
-        try {
-            Iterator<String> iterator = arguments.iterator();
-            if (!iterator.hasNext()) {
-                printUsage(outputStream);
-                return;
-            }
-
-            Predicate<String> stringPredicate = getPredicate(getRegexp(iterator.next()));
-            if (!iterator.hasNext()) {
-                InputStream inputStream = streamsContainer.getInputStream();
-                if (inputStream.available() != 0) {
-                    try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream))) {
-                        print(bufferedReader, stringPredicate, outputStream);
-                    }
-                }
-            } else {
-                while (iterator.hasNext()) {
-                    try (BufferedReader bufferedReader = Files.newBufferedReader(Paths.get(iterator.next()))) {
-                        print(bufferedReader, stringPredicate, outputStream);
-                    }
-                }
-            }
-        } catch (IOException | UncheckedIOException e) {
-            printError(e, streamsContainer.getErrorStream());
-        }
+    private List<String> parseArguments(@NotNull List<String> arguments) throws ExecutionException {
+        return parseArguments(arguments.toArray(new String[arguments.size()]));
     }
 
     @NotNull
-    protected String getRegexp(@NotNull String argument) {
-        argument = argument.startsWith("\"") && argument.endsWith("\"") ? argument.substring(1, argument.length() - 1) : argument;
+    private String getRegexp(@NotNull String argument) {
         return isWordRegexp() ? "\\b" + argument + "\\b" : argument;
     }
 
     @NotNull
-    protected Predicate<String> getPredicate(@NotNull String regexp) throws ExecutionException {
+    private Predicate<String> getPredicate(@NotNull String regexp) throws ExecutionException {
         Pattern pattern = Pattern.compile(regexp, isCaseInsensitive() ? Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE : 0);
         Predicate<String> stringPredicate = pattern.asPredicate();
 

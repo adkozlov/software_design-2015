@@ -2,7 +2,6 @@ package ru.spbau.kozlov.shell.pipelines;
 
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -16,9 +15,12 @@ public class ParsedCommand {
     @NotNull
     private final List<String> arguments;
 
-    public ParsedCommand(@NotNull String name, @NotNull List<String> arguments) {
-        this.name = name;
-        this.arguments = new ArrayList<>(arguments);
+    public ParsedCommand(@NotNull List<String> arguments) {
+        if (arguments.isEmpty()) {
+            throw new IllegalArgumentException("Argument list cannot be empty");
+        }
+        this.name = arguments.get(0);
+        this.arguments = arguments.subList(1, arguments.size());
     }
 
     @NotNull

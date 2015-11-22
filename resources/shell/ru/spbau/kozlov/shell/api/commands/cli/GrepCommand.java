@@ -6,12 +6,11 @@ import org.jetbrains.annotations.Nullable;
 import ru.spbau.kozlov.shell.api.annotations.CommandName;
 import ru.spbau.kozlov.shell.api.annotations.ManPage;
 import ru.spbau.kozlov.shell.api.commands.AbstractGrepCommand;
-import ru.spbau.kozlov.shell.api.executions.ExecutionException;
+import ru.spbau.kozlov.shell.api.invoker.ExecutionException;
 
+import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -45,8 +44,6 @@ public class GrepCommand extends AbstractGrepCommand {
 
     @Nullable
     private CommandLine commandLine;
-    @NotNull
-    private List<String> arguments = new ArrayList<>();
 
     public GrepCommand() {
         options.addOption(isCaseInsensitiveOption);
@@ -56,22 +53,10 @@ public class GrepCommand extends AbstractGrepCommand {
 
     @NotNull
     @Override
-    public List<String> getArguments() {
-        return Collections.unmodifiableList(arguments);
-    }
-
-    @Override
-    public void setArguments(@NotNull List<String> arguments) {
-        this.arguments = new ArrayList<>(arguments);
-    }
-
-    @NotNull
-    @Override
-    protected List<String> parseArguments() throws ExecutionException {
+    protected List<String> parseArguments(@NotNull String[] arguments) throws ExecutionException {
         try {
-            commandLine = parser.parse(options, getArgumentsAsArray(arguments));
-            arguments = commandLine.getArgList();
-            return arguments;
+            commandLine = parser.parse(options, arguments);
+            return commandLine.getArgList();
         } catch (ParseException e) {
             throw createParseException(e);
         }
@@ -104,9 +89,16 @@ public class GrepCommand extends AbstractGrepCommand {
         return commandLine != null && commandLine.hasOption(optionName);
     }
 
+    @NotNull
     @Override
-    protected void printUsage(@NotNull PrintStream outputStream) {
-        HelpFormatter formatter = new HelpFormatter();
-        formatter.printUsage(new PrintWriter(outputStream), 80, getCommandName(), options);
+    public String getUsageMessage() {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        new HelpFormatter().printUsage(new PrintWriter(outputStream), 80, getCommandName(), options);
+        return outputStream.toString();
+    }
+
+    @Override
+    public void printUsage(@NotNull PrintStream outputStream) {
+        outputStream.println(getUsageMessage());
     }
 }

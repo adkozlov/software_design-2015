@@ -5,9 +5,9 @@ import ru.spbau.kozlov.shell.api.annotations.CommandName;
 import ru.spbau.kozlov.shell.api.annotations.ManPage;
 import ru.spbau.kozlov.shell.api.commands.AbstractCommand;
 import ru.spbau.kozlov.shell.api.commands.Command;
-import ru.spbau.kozlov.shell.api.commands.NotZeroExitCodeException;
-import ru.spbau.kozlov.shell.api.executions.ExecutionException;
-import ru.spbau.kozlov.shell.api.executions.Executor;
+import ru.spbau.kozlov.shell.api.invoker.ExecutionException;
+import ru.spbau.kozlov.shell.api.invoker.PrintUsageException;
+import ru.spbau.kozlov.shell.pipelines.Pipeline;
 import ru.spbau.kozlov.shell.pipelines.PipelineParser;
 import ru.spbau.kozlov.shell.registry.CommandsRegistry;
 import ru.spbau.kozlov.shell.registry.ManPagesRegistry;
@@ -28,31 +28,23 @@ public class Shell implements Closeable {
     private static final Shell INSTANCE = new Shell();
 
     static {
-        Stream.of(ExitCommand.class, ManCommand.class).forEach(commandClass ->
-                CommandLoader.getInstance().loadCommand(commandClass.getName(), ClassLoader.getSystemClassLoader()));
+        Stream.of(ExitCommand.class, ManCommand.class).forEach(commandClass -> CommandLoader.loadCommand(
+                ClassLoader.getSystemClassLoader(), commandClass.getName()));
     }
 
     @NotNull
     private final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(System.in));
-    private boolean isTerminated = false;
-
-    private static void registerCommand(@NotNull Class<? extends Command> commandClass) {
-        CommandsRegistry.getInstance().register(commandClass);
-        ManPagesRegistry.getInstance().register(commandClass);
-    }
+    private int exitCode = -1;
 
     public static void main(@NotNull String[] args) {
-        CommandLoader.getInstance().loadCommands(Arrays.asList(args), ".").stream().forEach(Shell::registerCommand);
+        CommandLoader.loadCommands(".", args).forEach(Shell::registerCommand);
 
-        int exitCode = Command.OK_EXIT_CODE;
         try (Shell shell = getInstance()) {
             shell.run();
         } catch (IOException e) {
             System.err.println("I/O error: " + e.getMessage());
-        } catch (NotZeroExitCodeException e) {
-            exitCode = e.getExitCode();
         }
-        System.exit(exitCode);
+        System.exit(Shell.getInstance().exitCode);
     }
 
     @NotNull
@@ -60,26 +52,15 @@ public class Shell implements Closeable {
         return INSTANCE;
     }
 
-    public void run() throws IOException, NotZeroExitCodeException {
+    public void run() throws IOException {
         while (!isTerminated()) {
-            try {
-                System.out.print(PS1);
-                PipelineParser pipelineParser = new PipelineParser(bufferedReader.readLine());
-                pipelineParser.parse().execute();
-            } catch (NotZeroExitCodeException e) {
-                throw e;
-            } catch (ExecutionException e) {
-                System.err.println(e.getExecutableName() + ": " + e.getMessage());
-            }
+            System.out.print(PS1);
+            Pipeline.execute(PipelineParser.parse(bufferedReader.readLine()));
         }
     }
 
-    public void terminate() {
-        isTerminated = true;
-    }
-
     public boolean isTerminated() {
-        return isTerminated;
+        return exitCode >= 0;
     }
 
     @Override
@@ -87,30 +68,32 @@ public class Shell implements Closeable {
         bufferedReader.close();
     }
 
+    private static void registerCommand(@NotNull Class<? extends Command> commandClass) {
+        CommandsRegistry.getInstance().register(commandClass);
+        ManPagesRegistry.getInstance().register(commandClass);
+    }
+
     @CommandName("exit")
     @ManPage({"Closes shell"})
-    public static class ExitCommand extends AbstractCommand {
+    public static class ExitCommand implements Command {
 
         static {
             registerCommand(ExitCommand.class);
         }
 
         @Override
-        public void execute(@NotNull Executor.StreamsContainer streamsContainer) throws NotZeroExitCodeException {
-            Shell.getInstance().terminate();
-
-            List<String> arguments = getArguments();
-            if (arguments.isEmpty()) {
-                return;
-            }
-
+        public void execute(@NotNull InputStream inputStream,
+                            @NotNull PrintStream outputStream,
+                            @NotNull List<String> arguments) throws ExecutionException {
+            int exitCode = 0;
             try {
-                int exitCode = Integer.valueOf(arguments.get(0));
-                if (exitCode != OK_EXIT_CODE) {
-                    throw new NotZeroExitCodeException(exitCode, getCommandName());
+                if (!arguments.isEmpty()) {
+                    exitCode = Integer.parseInt(arguments.get(0));
                 }
             } catch (NumberFormatException e) {
-                streamsContainer.getOutputStream().println(getCommandName() + ": numeric value required");
+                throw new ExecutionException(getCommandName(), "numeric value required", e);
+            } finally {
+                Shell.getInstance().exitCode = exitCode;
             }
         }
     }
@@ -124,24 +107,40 @@ public class Shell implements Closeable {
         }
 
         @Override
-        public void execute(@NotNull Executor.StreamsContainer streamsContainer) {
-            PrintStream outputStream = streamsContainer.getOutputStream();
-            List<String> arguments = getArguments();
+        public void execute(@NotNull InputStream inputStream,
+                            @NotNull PrintStream outputStream,
+                            @NotNull List<String> arguments) throws ExecutionException {
             if (arguments.isEmpty()) {
-                outputStream.println("What manual page do you want?");
-                return;
+                throw new PrintUsageException(getCommandName());
             }
 
-            for (String commandName : arguments) {
-                String[] lines = ManPagesRegistry.getInstance().get(commandName);
-                if (lines != null) {
-                    for (String line : lines) {
-                        outputStream.println(line);
-                    }
-                } else {
-                    outputStream.println("No manual entry for " + commandName);
-                }
+            super.execute(inputStream, outputStream, arguments);
+        }
+
+        @Override
+        protected void handleInputStream(@NotNull InputStream inputStream,
+                                         @NotNull PrintStream outputStream) throws IOException {
+        }
+
+        @Override
+        protected void handleArgument(@NotNull String argument, @NotNull PrintStream outputStream) throws IOException {
+            String[] lines = ManPagesRegistry.getInstance().get(argument);
+            if (lines != null) {
+                Arrays.stream(lines).forEach(outputStream::println);
+            } else {
+                outputStream.println("No manual entry for " + argument);
             }
+        }
+
+        @NotNull
+        @Override
+        public String getUsageMessage() {
+            return "What manual page do you want?";
+        }
+
+        @Override
+        public void printUsage(@NotNull PrintStream outputStream) {
+            outputStream.println(getUsageMessage());
         }
     }
 }

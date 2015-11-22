@@ -7,11 +7,9 @@ import org.jetbrains.annotations.NotNull;
 import ru.spbau.kozlov.shell.api.annotations.CommandName;
 import ru.spbau.kozlov.shell.api.annotations.ManPage;
 import ru.spbau.kozlov.shell.api.commands.AbstractGrepCommand;
-import ru.spbau.kozlov.shell.api.executions.ExecutionException;
+import ru.spbau.kozlov.shell.api.invoker.ExecutionException;
 
-import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -36,21 +34,10 @@ public class GrepCommand extends AbstractGrepCommand {
 
     @NotNull
     @Override
-    public List<String> getArguments() {
-        return Collections.unmodifiableList(arguments);
-    }
-
-    @Override
-    public void setArguments(@NotNull List<String> arguments) {
-        this.arguments = new ArrayList<>(arguments);
-    }
-
-    @NotNull
-    @Override
-    protected List<String> parseArguments() throws ExecutionException {
+    protected List<String> parseArguments(@NotNull String[] arguments) throws ExecutionException {
         try {
-            new JCommander(this, getArgumentsAsArray(arguments));
-            return arguments;
+            new JCommander(this, arguments);
+            return this.arguments;
         } catch (ParameterException e) {
             throw createParseException(e);
         }
@@ -71,8 +58,9 @@ public class GrepCommand extends AbstractGrepCommand {
         return afterContextNum;
     }
 
+    @NotNull
     @Override
-    protected void printUsage(@NotNull PrintStream outputStream) {
-        printUsage("[-iw] [-A num] [file]", outputStream);
+    public String getUsageMessage() {
+        return "[-iw] [-A num] <regex> [file]";
     }
 }

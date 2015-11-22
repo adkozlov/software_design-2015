@@ -7,23 +7,30 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Paths;
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Arrays;
+import java.util.stream.Stream;
 
 /**
  * @author adkozlov
  */
 public class CommandLoader {
 
-    @NotNull
-    private static final CommandLoader INSTANCE = new CommandLoader();
-
     private CommandLoader() {
     }
 
     @NotNull
-    public static CommandLoader getInstance() {
-        return INSTANCE;
+    public static Class<? extends Command> loadCommand(@NotNull ClassLoader classLoader, @NotNull String className) {
+        try {
+            return Class.forName(className, true, classLoader).asSubclass(Command.class);
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @NotNull
+    public static Stream<Class<? extends Command>> loadCommands(@NotNull String classPath, @NotNull String... classNames) {
+        ClassLoader classLoader = getClassLoader(classPath);
+        return Arrays.stream(classNames).map(className -> loadCommand(classLoader, className));
     }
 
     @NotNull
@@ -31,24 +38,7 @@ public class CommandLoader {
         try {
             return new URLClassLoader(new URL[]{Paths.get(classPath).toUri().toURL()});
         } catch (MalformedURLException e) {
-            // cannot be
             throw new RuntimeException(e);
         }
-    }
-
-    @NotNull
-    public Class<? extends Command> loadCommand(@NotNull String className, @NotNull ClassLoader classLoader) {
-        try {
-            return Class.forName(className, true, classLoader).asSubclass(Command.class);
-        } catch (ClassNotFoundException e) {
-            // cannot be
-            throw new RuntimeException(e);
-        }
-    }
-
-    @NotNull
-    public List<Class<? extends Command>> loadCommands(@NotNull List<String> classNames, @NotNull String classPath) {
-        ClassLoader classLoader = getClassLoader(classPath);
-        return classNames.stream().map(className -> loadCommand(className, classLoader)).collect(Collectors.toList());
     }
 }

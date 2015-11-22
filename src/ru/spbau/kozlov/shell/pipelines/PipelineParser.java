@@ -5,7 +5,11 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.StringTokenizer;
+import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * @author adkozlov
@@ -13,37 +17,30 @@ import java.util.StringTokenizer;
 public class PipelineParser {
 
     @NotNull
-    public static final String BAR = "|";
-
+    public static final Pattern SINGLE_COMMAND = Pattern.compile("\"?\\|(?=(([^\"]*\"){2})*[^\"]*$) *\"?");
     @NotNull
-    private final StringTokenizer tokenizer;
+    public static final Pattern SINGLE_TOKEN = Pattern.compile("[^\\s\"']+|\"([^\"]*)\"|'([^']*)'");
 
-    public PipelineParser(@NotNull String line) {
-        tokenizer = new StringTokenizer(line);
+    private PipelineParser() {
     }
 
     @NotNull
-    public Pipeline parse() {
-        List<ParsedCommand> parsedCommands = new ArrayList<>();
-        ParsedCommand parsedCommand;
-        while ((parsedCommand = parseNextCommand()) != null) {
-            parsedCommands.add(parsedCommand);
-        }
-        return new Pipeline(parsedCommands);
+    public static List<ParsedCommand> parse(@NotNull String line) {
+        return SINGLE_COMMAND.splitAsStream(line)
+                .map(PipelineParser::parseNextCommand)
+                .collect(Collectors.toList());
     }
 
     @Nullable
-    private ParsedCommand parseNextCommand() {
-        if (!tokenizer.hasMoreTokens()) {
-            return null;
-        }
-
-        String name = tokenizer.nextToken();
+    private static ParsedCommand parseNextCommand(@NotNull String command) {
         List<String> arguments = new ArrayList<>();
-        String argument;
-        while (tokenizer.hasMoreTokens() && (argument = tokenizer.nextToken()) != null && !argument.equals(BAR)) {
-            arguments.add(argument);
+        for (Matcher regexMatcher = SINGLE_TOKEN.matcher(command); regexMatcher.find(); ) {
+            arguments.add(Stream.of(2, 1, 0)
+                    .map(regexMatcher::group)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .get());
         }
-        return new ParsedCommand(name, arguments);
+        return new ParsedCommand(arguments);
     }
 }
